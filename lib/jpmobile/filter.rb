@@ -117,8 +117,9 @@ module Jpmobile
     # 半角カナと全角カナのフィルタ
     class HankakuKana < FilterTable
       include ApplyOnlyForMobile
-      @@internal = %w(ガ ギ グ ゲ ゴ ザ ジ ズ ゼ ゾ ダ ヂ ヅ デ ド バ ビ ブ ベ ボ パ ピ プ ペ ポ ヴ ア イ ウ エ オ カ キ ク ケ コ サ シ ス セ ソ タ チ ツ テ ト ナ ニ ヌ ネ ノ ハ ヒ フ ヘ ホ マ ミ ム メ モ ヤ ユ ヨ ラ リ ル レ ロ ワ ヲ ン ャ ュ ョ ァ ィ ゥ ェ ォ ッ ゛ ゜ ー ).freeze
-      @@external = %w(ｶﾞ ｷﾞ ｸﾞ ｹﾞ ｺﾞ ｻﾞ ｼﾞ ｽﾞ ｾﾞ ｿﾞ ﾀﾞ ﾁﾞ ﾂﾞ ﾃﾞ ﾄﾞ ﾊﾞ ﾋﾞ ﾌﾞ ﾍﾞ ﾎﾞ ﾊﾟ ﾋﾟ ﾌﾟ ﾍﾟ ﾎﾟ ｳﾞ ｱ ｲ ｳ ｴ ｵ ｶ ｷ ｸ ｹ ｺ ｻ ｼ ｽ ｾ ｿ ﾀ ﾁ ﾂ ﾃ ﾄ ﾅ ﾆ ﾇ ﾈ ﾉ ﾊ ﾋ ﾌ ﾍ ﾎ ﾏ ﾐ ﾑ ﾒ ﾓ ﾔ ﾕ ﾖ ﾗ ﾘ ﾙ ﾚ ﾛ ﾜ ｦ ﾝ ｬ ｭ ｮ ｧ ｨ ｩ ｪ ｫ ｯ ﾞ ﾟ ｰ).freeze
+      # オリジナルのものに、句読点や記号の変換情報を追加
+      @@internal = %w(ガ ギ グ ゲ ゴ ザ ジ ズ ゼ ゾ ダ ヂ ヅ デ ド バ ビ ブ ベ ボ パ ピ プ ペ ポ ヴ ア イ ウ エ オ カ キ ク ケ コ サ シ ス セ ソ タ チ ツ テ ト ナ ニ ヌ ネ ノ ハ ヒ フ ヘ ホ マ ミ ム メ モ ヤ ユ ヨ ラ リ ル レ ロ ワ ヲ ン ャ ュ ョ ァ ィ ゥ ェ ォ ッ ゛ ゜ ー 。 、 「 」).freeze
+      @@external = %w(ｶﾞ ｷﾞ ｸﾞ ｹﾞ ｺﾞ ｻﾞ ｼﾞ ｽﾞ ｾﾞ ｿﾞ ﾀﾞ ﾁﾞ ﾂﾞ ﾃﾞ ﾄﾞ ﾊﾞ ﾋﾞ ﾌﾞ ﾍﾞ ﾎﾞ ﾊﾟ ﾋﾟ ﾌﾟ ﾍﾟ ﾎﾟ ｳﾞ ｱ ｲ ｳ ｴ ｵ ｶ ｷ ｸ ｹ ｺ ｻ ｼ ｽ ｾ ｿ ﾀ ﾁ ﾂ ﾃ ﾄ ﾅ ﾆ ﾇ ﾈ ﾉ ﾊ ﾋ ﾌ ﾍ ﾎ ﾏ ﾐ ﾑ ﾒ ﾓ ﾔ ﾕ ﾖ ﾗ ﾘ ﾙ ﾚ ﾛ ﾜ ｦ ﾝ ｬ ｭ ｮ ｧ ｨ ｩ ｪ ｫ ｯ ﾞ ﾟ ｰ ｡ ､ ｢ ｣).freeze
     end
 
     # 絵文字変換フィルタ
@@ -169,5 +170,46 @@ module Jpmobile
         end
       end
     end
+
+    # ドコモ端末からのリクエストであれば、リクエストURLに "guid=ON" があるかどうかチェックする。
+    # "guid=ON" が含まれていれば、true を返す。
+    # もし "guid=ON" が含まれていなければ、リクエストメソッドに応じたURLにリダイレクトし、false を返す。
+    def has_guid_if_docomo?
+      if request.mobile && (request.mobile.kind_of? Jpmobile::Mobile::Docomo)
+        unless has_guid? request.url
+          if request.get?
+            # guid=ONを付加して同じURLにリダイレクト
+            redirect_to request.url + (request.url.index('?') ? "&" : "?") + "guid=ON"
+          else
+            # GET以外のときは / へリダイレクト (エラー扱い)
+            flash[:notice] = "error!"
+            redirect_to "/"
+          end
+          return false
+        end
+      end
+      true
+    end
+
+    # 指定したURL文字列に、guid=ON というパラメータが含まれていれば true
+    # 含まれていなければ false を返す
+    def has_guid?(url)
+      if url.index("?")
+        param_strs = url[url.index("?")+1..url.length-1].split("&")
+        param_strs.find {|str| str == "guid=ON"} ? true : false
+      else
+        false
+      end
+    end
+
+    # フィルタ用メソッド: ドコモ端末からのリクエストであれば、レスポンスの Content-Type ヘッダを書き換える
+    def set_xhtml_content_type_for_docomo
+      if request.mobile.kind_of? Jpmobile::Mobile::Docomo
+        if /^text\/html/ =~ headers["Content-Type"]
+          headers["Content-Type"] = "application/xhtml+xml; charset=Shift_JIS"
+        end
+      end
+    end
+
   end
 end
